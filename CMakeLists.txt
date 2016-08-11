@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 2.6)
+project(mnist)
+add_executable(train train.cpp mnistreader.cpp predictor.cpp)
+add_executable(test_mnist test_mnist.cpp mnistreader.cpp predictor.cpp)
+add_definitions("-std=c++11")
+add_definitions("-pg")
+include_directories(/usr/include/eigen3)

@@ -1,0 +1,9 @@
+*-ubyte
+cmake_install.cmake
+Makefile
+CMakeFiles
+CMakeCache.txt
+test_mnist
+test_mnist.exe
+train
+train.exe
