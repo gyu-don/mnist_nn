@@ -18,6 +18,14 @@ public:
     Trainee(int n_hid1, int n_hid2, float init_sigma);
     void train(std::vector<std::pair<InputType, AnswerType>> minibatch, float learning_rate);
     bool dump(const char *traindatapath);
+private:
+    /* For AdaGrad */
+    Eigen::ArrayXXf gsq_w1;
+    Eigen::ArrayXf gsq_b1;
+    Eigen::ArrayXXf gsq_w2;
+    Eigen::ArrayXf gsq_b2;
+    Eigen::ArrayXXf gsq_w3;
+    Eigen::ArrayXf gsq_b3;
 };
 
 Trainee::Trainee(int n_hid1, int n_hid2, float init_sigma)
@@ -26,6 +34,13 @@ Trainee::Trainee(int n_hid1, int n_hid2, float init_sigma)
     n_hid1vec = n_hid1;
     n_hid2vec = n_hid2;
     n_outputvec = 10;
+
+    gsq_w1 = Eigen::ArrayXXf::Zero(n_hid1vec, n_inputvec);
+    gsq_b1 = Eigen::ArrayXf::Zero(n_hid1vec);
+    gsq_w2 = Eigen::ArrayXXf::Zero(n_hid2vec, n_hid1vec);
+    gsq_b2 = Eigen::ArrayXf::Zero(n_hid2vec);
+    gsq_w3 = Eigen::ArrayXXf::Zero(n_outputvec, n_hid2vec);
+    gsq_b3 = Eigen::ArrayXf::Zero(n_outputvec);
 
     std::mt19937 mt((std::random_device())());
     std::normal_distribution<float> nd(0.0, init_sigma);
@@ -52,6 +67,17 @@ void Trainee::train(std::vector<std::pair<InputType, AnswerType>> minibatch, flo
     Eigen::MatrixXf dweight1 = Eigen::MatrixXf::Zero(n_hid1vec, n_inputvec);
     Eigen::VectorXf dbias1 = Eigen::VectorXf::Zero(n_hid1vec);
 
+    /* For AdaGrad */
+    auto fn = [](float lhs, float rhs) -> float { return lhs != 0.0 ? lhs / rhs : 0.0; };
+    /*
+    Eigen::ArrayXXf gsq_w1 = Eigen::ArrayXXf::Zero(n_hid1vec, n_inputvec);
+    Eigen::ArrayXf gsq_b1 = Eigen::ArrayXf::Zero(n_hid1vec);
+    Eigen::ArrayXXf gsq_w2 = Eigen::ArrayXXf::Zero(n_hid2vec, n_hid1vec);
+    Eigen::ArrayXf gsq_b2 = Eigen::ArrayXf::Zero(n_hid2vec);
+    Eigen::ArrayXXf gsq_w3 = Eigen::ArrayXXf::Zero(n_outputvec, n_hid2vec);
+    Eigen::ArrayXf gsq_b3 = Eigen::ArrayXf::Zero(n_outputvec);
+    auto fn = [](float lhs, float rhs) -> float { return lhs != 0.0 ? lhs / rhs : 0.0; };
+    */
 
     for(auto sample: minibatch){
         Eigen::VectorXf inputvec = input2vec(sample.first);
@@ -62,31 +88,54 @@ void Trainee::train(std::vector<std::pair<InputType, AnswerType>> minibatch, flo
         Eigen::VectorXf delta3;
         delta3 = feedforward(inputvec, 3);
         delta3(sample.second) -= 1.0f;
-        dweight3 += delta3 * z2.transpose();
-        dbias3 += delta3;
+        {
+            Eigen::ArrayXXf e = delta3 * z2.transpose();
+            gsq_w3 += e * e;
+            gsq_b3 += delta3.array() * delta3.array();
+            dweight3 += e.matrix(); //e.binaryExpr(gsq_w3.sqrt(), fn).matrix();
+            dbias3 += delta3; //delta3.array().binaryExpr(gsq_b3.sqrt(), fn).matrix();
+        }
 
         // Calculate delta of 2nd hidden layer.
         Eigen::VectorXf delta2 = Eigen::VectorXf::Zero(n_hid2vec);
         for(int j=0;j<n_hid2vec;j++){
             for(int k=0;k<n_outputvec;k++) delta2(j) += delta3(k) * weight3(k, j) * (z2(j) >= 0.f ? 1.f : 0.f);
         }
-        dweight2 += delta2 * z1.transpose();
-        dbias2 += delta2;
+        {
+            Eigen::ArrayXXf e = delta2 * z1.transpose();
+            gsq_w2 += e * e;
+            gsq_b2 += delta2.array() * delta2.array();
+            dweight2 += e.matrix(); //e.binaryExpr(gsq_w2.sqrt(), fn).matrix();
+            dbias2 += delta2; //delta2.array().binaryExpr(gsq_b2.sqrt(), fn).matrix();
+        }
 
         // Calculate delta of 1st hidden layer.
         Eigen::VectorXf delta1 = Eigen::VectorXf::Zero(n_hid1vec);
         for(int j=0;j<n_hid1vec;j++){
             for(int k=0;k<n_hid2vec;k++) delta1(j) += delta2(k) * weight2(k, j) * (z1(j) >= 0.f ? 1.f : 0.f);
         }
-        dweight1 += delta1 * inputvec.transpose();
-        dbias1 += delta1;
+        {
+            Eigen::ArrayXXf e = delta1 * inputvec.transpose();
+            gsq_w1 += e * e;
+            gsq_b1 += delta1.array() * delta1.array();
+            dweight1 += e.matrix(); //e.binaryExpr(gsq_w1.sqrt(), fn).matrix();
+            dbias1 += delta1; //delta1.array().binaryExpr(gsq_b1.sqrt(), fn).matrix();
+        }
     }
+    weight1 -= dweight1.binaryExpr(gsq_w1.sqrt().matrix(), fn) * learning_rate / minibatch.size();
+    bias1 -= dbias1.binaryExpr(gsq_b1.sqrt().matrix(), fn) * learning_rate / minibatch.size();
+    weight2 -= dweight2.binaryExpr(gsq_w2.sqrt().matrix(), fn) * learning_rate / minibatch.size();
+    bias2 -= dbias2.binaryExpr(gsq_b2.sqrt().matrix(), fn) * learning_rate / minibatch.size();
+    weight3 -= dweight3.binaryExpr(gsq_w3.sqrt().matrix(), fn) * learning_rate / minibatch.size();
+    bias3 -= dbias3.binaryExpr(gsq_b3.sqrt().matrix(), fn) * learning_rate / minibatch.size();
+    /*
     weight1 -= dweight1 * learning_rate / minibatch.size();
     bias1 -= dbias1 * learning_rate / minibatch.size();
     weight2 -= dweight2 * learning_rate / minibatch.size();
     bias2 -= dbias2 * learning_rate / minibatch.size();
     weight3 -= dweight3 * learning_rate / minibatch.size();
     bias3 -= dbias3 * learning_rate / minibatch.size();
+    */
 
 }
 
@@ -169,6 +218,7 @@ void train(const char *imagespath, const char *labelspath, int n_hid1, int n_hid
         //if(n_trained > 2000) break;
         std::cout << '\r' << n_trained << "/" << reader.length() << std::flush;
     }
+    std::cout << std::endl;
     trainee.dump("traindata");
 }
 

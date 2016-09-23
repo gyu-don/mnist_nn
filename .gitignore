@@ -7,3 +7,4 @@ test_mnist
 test_mnist.exe
 train
 train.exe
+gmon.out
