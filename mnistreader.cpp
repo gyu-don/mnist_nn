@@ -40,7 +40,7 @@ MNISTreader::MNISTreader(const char *images_filepath, const char *labels_filepat
 
 bool MNISTreader::readNext()
 {
-    readNext_impl(current_pixels);
+    return readNext_impl(current_pixels);
 }
 
 bool MNISTreader::readNext_impl(MNISTpixels &dest)
