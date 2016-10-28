@@ -69,7 +69,7 @@ int Predictor::predict(const InputType &input)
     Eigen::VectorXf vec3 = feedforward(inputvec, 3);
 
     assert(vec3.size() == 10);
-    //std::cerr << vec3.transpose() << std::endl;  // 0〜9の、どれであるかの確率が出力される
+    //std::cerr << vec3.transpose() << std::endl;  // 0から9の、どれであるかの確率が出力される
 
     // 確率が最大のものを選んで返す
     int max_idx = 0;
@@ -90,8 +90,7 @@ Eigen::VectorXf Predictor::feedforward(const Eigen::VectorXf &inputvec, int dept
     vec1 = (weight1 * inputvec + bias1).unaryExpr([](float x){ return x > 0.0f ? x : 0.0f; });
     if(depth == 1) return vec1;
 
-    // DON'T REPEAT YOURSELF!!!!!!!!!!!!!
-    // 無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄無駄
+    // DON'T REPEAT YOURSELF!
     Eigen::VectorXf vec2(n_hid2vec);
     vec2 = (weight2 * vec1 + bias2).unaryExpr([](float x){ return x > 0.0f ? x : 0.0f; });
     if(depth == 2) return vec2;
